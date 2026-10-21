@@ -84,12 +84,9 @@ button.armed{background:var(--pohutukawa);border-color:var(--pohutukawa);color:#
   animation:petal .9s ease-out forwards}
 .petal.gold{background:var(--sun);width:5px;height:5px;border-radius:50%}
 @keyframes petal{0%{transform:translate(0,0) rotate(0) scale(1);opacity:1}100%{transform:translate(var(--dx),var(--dy)) rotate(var(--rot)) scale(.6);opacity:0}}
-.traywrap{position:relative}
-.chance{position:absolute;left:50%;top:-6px;transform:translateX(-50%);z-index:2;white-space:nowrap;pointer-events:none;
-  font:800 .74rem var(--body);text-transform:uppercase;letter-spacing:.12em;color:var(--ink);
-  background:linear-gradient(100deg,var(--sun) 0%,#ffe08a 45%,var(--sun) 60%) 0 0/250% 100%;padding:5px 12px;border-radius:999px;
-  box-shadow:0 2px 0 #b07d00;animation:shimmer 1.8s linear infinite}
-@keyframes shimmer{to{background-position:-250% 0}}
+/* a board that can be emptied leans in very slightly; no words, just a feeling */
+.board{transition:transform .9s cubic-bezier(.2,.8,.2,1)}
+.board.near{transform:scale(1.018)}
 .board.shine{animation:shine 1.2s ease-out}
 @keyframes shine{0%{box-shadow:0 0 0 0 rgba(255,196,61,.9),0 12px 26px -12px rgba(11,70,85,.55)}40%{box-shadow:0 0 0 14px rgba(255,196,61,.45),0 0 40px 10px rgba(255,196,61,.6)}100%{box-shadow:0 0 0 24px rgba(255,196,61,0),0 12px 26px -12px rgba(11,70,85,.55)}}
 .tray{height:clamp(110px,18dvh,150px);display:grid;grid-template-columns:repeat(3,1fr);align-items:center;justify-items:center}
@@ -131,7 +128,7 @@ button.armed{background:var(--pohutukawa);border-color:var(--pohutukawa);color:#
   100%{opacity:0;transform:translate(-50%,-90%) scale(.9)}}
 .board.jolt{animation:jolt .4s ease-out}
 @keyframes jolt{0%,100%{transform:translate(0,0)}20%{transform:translate(-5px,2px) rotate(-.6deg)}40%{transform:translate(5px,-2px) rotate(.6deg)}60%{transform:translate(-3px,1px)}80%{transform:translate(2px,0)}}
-@media (prefers-reduced-motion:reduce){body::before,body::after,.chance,.board.shine{animation:none}}
+@media (prefers-reduced-motion:reduce){body::before,body::after,.board.shine{animation:none}.board{transition:none}}
 @media (prefers-reduced-motion:reduce){.combo.bump,.board.jolt,.toast.combo.show{animation:none}.toast.combo.show{opacity:1}}
 @media (prefers-reduced-motion:reduce){.cell.pop{animation:none;opacity:0}.toast.show{animation:none;opacity:1}.petal{display:none}}
 </style>
@@ -175,7 +172,7 @@ button.armed{background:var(--pohutukawa);border-color:var(--pohutukawa);color:#
       <button id="installW" type="button" class="ghostbtn" hidden>Add to home screen</button>
     </div>
   </div>
-  <div class="traywrap"><div class="chance" id="chance" hidden>Board clear possible</div><div class="tray" id="tray"></div></div>
+  <div class="tray" id="tray"></div>
   </div>
 </div>
 
@@ -202,6 +199,10 @@ let S; // state
 let best=0;
 let hist=[]; // previous states for undo, newest last
 const HIST_MAX=2,UNDOS_PER_GAME=2,ALL_CLEAR_BONUS=5000;
+// Board-clear tuning: start generous, get a bit tighter after every clear, never below the floor
+const CLEAR_ODDS_START=0.6,CLEAR_ODDS_DECAY=0.8,CLEAR_ODDS_FLOOR=0.06;
+// Lucky streaks: chance per deal of starting one, and how many deals it lasts
+const LUCKY_CHANCE=0.05,LUCKY_LENGTH=3;
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 
 // Piece mix: favour the friendly middle sizes, keep the big awkward ones rare
@@ -290,9 +291,14 @@ function constructTrio(board){
 // so careful play keeps you going further and further. Very long games slowly ease
 // off the help so a run still ends through your own choices.
 function deal(){
-  // When the board can be emptied in one go, usually hand over exactly those pieces
+  // Lucky streaks: now and then the next few deals are very generous, to keep it fun
+  if(!S.lucky&&Math.random()<LUCKY_CHANCE)S.lucky=LUCKY_LENGTH;
+  const lucky=S.lucky>0;if(lucky)S.lucky--;
+  // When the board can be emptied in one go, sometimes hand over exactly those pieces.
+  // Each board clear you get makes the next one a little less likely, except in a lucky streak.
   const ac=findClearTrio(S.board);
-  if(ac&&Math.random()<0.85){S.tray=ac;S.dealt=(S.dealt||0)+1;S.clearChance=true;return}
+  const clearOdds=lucky?1:Math.max(CLEAR_ODDS_FLOOR,CLEAR_ODDS_START*Math.pow(CLEAR_ODDS_DECAY,S.allClears||0));
+  if(ac&&Math.random()<clearOdds){S.tray=ac;S.dealt=(S.dealt||0)+1;S.clearChance=true;return}
   S.clearChance=false;
   const filled=S.board.reduce((n,v)=>n+(v!==null),0)/(N*N);
   const help=Math.max(0,Math.min(1,(filled-0.15)/0.3));
@@ -305,7 +311,7 @@ function deal(){
   }
   if(cands.length){
     cands.sort((a,b)=>b.v-a.v);
-    const pickBest=Math.random()<(0.4+0.6*help)*ease;
+    const pickBest=lucky||Math.random()<(0.4+0.6*help)*ease;
     const pool=pickBest?1:Math.max(1,Math.ceil(cands.length/2));
     S.tray=cands[Math.floor(Math.random()*pool)].t;return;
   }
@@ -446,7 +452,7 @@ function render(){
   countTo(S.score);bestEl.textContent=fmt(best);
   comboEl.textContent=S.combo>1?`Combo x${S.combo}`:'';
   $('over').hidden=!S.over;
-  $('chance').hidden=!S.clearChance||S.over;const canUndo=hist.length>0&&undosLeft()>0;$('undo').disabled=!canUndo;$('undo').textContent=`Undo (${undosLeft()})`;$('undoOver').hidden=!canUndo;$('undoOver').textContent=`Undo last move (${undosLeft()} left)`;
+  boardEl.classList.toggle('near',!!S.clearChance&&!S.over);const canUndo=hist.length>0&&undosLeft()>0;$('undo').disabled=!canUndo;$('undo').textContent=`Undo (${undosLeft()})`;$('undoOver').hidden=!canUndo;$('undoOver').textContent=`Undo last move (${undosLeft()} left)`;
   if(S.over){$('final').textContent=fmt(S.score);$('overmsg').textContent=S.score>=best&&S.score>0?'New best score':'Final score'}
 }
 const fmt=n=>Math.round(n).toLocaleString('en-NZ');
