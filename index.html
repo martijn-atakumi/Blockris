@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Blockris</title>
+<meta name="description" content="An ad-free 8x8 block puzzle.">
+<meta name="theme-color" content="#e7eaf1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#10131d" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Blockris">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+/* Base reset for standalone use */
+:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;font:14px system-ui,-apple-system,"Segoe UI",sans-serif;overscroll-behavior:none}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;800&family=Figtree:wght@400;600&display=swap">
+<style>
+/* Layout: one-screen portrait column; header + score, 8x8 enamel board, three-piece tray below */
+:root{
+  --bg:#e7eaf1; --fg:#1b2133; --muted:#5d6782; --board:#283152; --well:#333d61; --accent:#f3a712; --panel:rgba(27,33,51,.92); --panel-fg:#f3f5fa;
+  --display:"Unbounded","Arial Black",system-ui,sans-serif;
+  --body:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --gap:4px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#10131d; --fg:#e8ebf3; --muted:#8b94ae; --board:#1c2236; --well:#272e48; --accent:#f6b733; --panel:rgba(12,15,24,.92); --panel-fg:#f3f5fa; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#10131d; --fg:#e8ebf3; --muted:#8b94ae; --board:#1c2236; --well:#272e48; --accent:#f6b733; --panel:rgba(12,15,24,.92); --panel-fg:#f3f5fa; color-scheme:dark}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);overflow:hidden;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:none}
+.app{height:100%;max-width:480px;margin:0 auto;display:flex;flex-direction:column;gap:12px;
+  padding-block:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));box-sizing:border-box}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+h1{font-family:var(--display);font-weight:800;font-size:1.05rem;letter-spacing:.02em;margin:0;text-transform:uppercase}
+h1 span{color:var(--accent)}
+button{font:600 .85rem var(--body);color:var(--fg);background:transparent;border:1.5px solid var(--muted);
+  border-radius:999px;padding:6px 14px;cursor:pointer}
+.actions{display:flex;gap:8px}
+button:disabled{opacity:.35;cursor:default}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.armed{border-color:var(--accent);color:var(--accent)}
+.scores{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.score{font-family:var(--display);font-weight:800;font-size:2.6rem;line-height:1;font-variant-numeric:tabular-nums}
+.label{font-size:.7rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);font-weight:600}
+.best{text-align:right}
+.best b{display:block;font-family:var(--display);font-weight:500;font-size:1.1rem;font-variant-numeric:tabular-nums}
+.combo{font-size:.8rem;font-weight:600;color:var(--accent);min-height:1.1em}
+.boardwrap{position:relative;align-self:center;width:min(100%,54dvh);max-width:100%}
+.board{display:grid;grid-template-columns:repeat(8,1fr);gap:var(--gap);padding:7px;background:var(--board);
+  border-radius:14px;aspect-ratio:1;box-shadow:0 10px 30px -12px rgba(16,20,40,.5)}
+.cell{border-radius:5px;background:var(--well);box-shadow:inset 0 2px 3px rgba(0,0,0,.25)}
+.tile,.cell.filled{background:var(--c);box-shadow:inset 0 -3px 0 rgba(0,0,0,.28),inset 0 2px 0 rgba(255,255,255,.38)}
+.cell.ghost{background:var(--c);opacity:.45;box-shadow:none}
+.cell.hot{filter:brightness(1.35) saturate(1.1)}
+.cell.pop{animation:pop .32s ease-in forwards}
+@keyframes pop{0%{transform:scale(1);filter:brightness(2)}100%{transform:scale(.2);opacity:0}}
+.tray{flex:1;min-height:110px;display:grid;grid-template-columns:repeat(3,1fr);align-items:center;justify-items:center}
+.slot{width:100%;height:100%;display:flex;align-items:center;justify-content:center;cursor:grab;touch-action:none}
+.piece{display:grid;gap:3px}
+.piece .tile,.piece .sp{width:var(--s);height:var(--s);border-radius:4px}
+.slot .piece{--s:clamp(14px,4.4vw,22px)}
+.slot.dead .piece{opacity:.3;filter:grayscale(.8)}
+.slot.lifted .piece{visibility:hidden}
+.drag{position:fixed;left:0;top:0;z-index:50;pointer-events:none;gap:var(--gap);filter:drop-shadow(0 8px 10px rgba(0,0,0,.35))}
+.toast{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);pointer-events:none;text-align:center;
+  font-family:var(--display);font-weight:800;color:#fff;text-shadow:0 2px 0 rgba(0,0,0,.35),0 0 18px rgba(0,0,0,.4);opacity:0}
+.toast.show{animation:rise 1s ease-out}
+.toast small{display:block;font-size:.95rem;color:var(--accent)}
+.toast big{font-size:1.9rem}
+@keyframes rise{0%{opacity:0;transform:translate(-50%,-30%) scale(.8)}15%{opacity:1;transform:translate(-50%,-50%) scale(1.05)}80%{opacity:1}100%{opacity:0;transform:translate(-50%,-80%)}}
+.over{position:absolute;inset:0;border-radius:14px;background:var(--panel);color:var(--panel-fg);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:10px;text-align:center;padding:20px}
+.over h2{font-family:var(--display);font-weight:800;margin:0;font-size:1.4rem;text-transform:uppercase}
+.over p{margin:0;color:#b8c0d6}
+.over .big{font-family:var(--display);font-size:2.4rem;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums}
+.over button{color:var(--panel-fg);border-color:var(--accent);background:var(--accent);color:#1b2133;padding:10px 26px;font-size:1rem}
+.over button.ghostbtn{background:transparent;color:var(--panel-fg);border-color:#8b94ae;font-size:.85rem;padding:6px 16px}
+.hint{font-size:.75rem;color:var(--muted);text-align:center;margin:0}
+@media (prefers-reduced-motion:reduce){.cell.pop{animation:none;opacity:0}.toast.show{animation:none;opacity:1}}
+</style>
+
+<div class="app">
+  <header>
+    <h1>Block<span>r</span>is</h1>
+    <div class="actions">
+      <button id="undo" type="button" disabled>Undo</button>
+      <button id="restart" type="button">New game</button>
+    </div>
+  </header>
+  <div class="scores">
+    <div><div class="label">Score</div><div class="score" id="score">0</div><div class="combo" id="combo"></div></div>
+    <div class="best"><div class="label">Best</div><b id="best">0</b></div>
+  </div>
+  <div class="boardwrap">
+    <div class="board" id="board"></div>
+    <div class="toast" id="toast"></div>
+    <div class="over" id="over" hidden>
+      <h2>No moves left</h2>
+      <div class="big" id="final">0</div>
+      <p id="overmsg">Final score</p>
+      <button id="again" type="button">Play again</button>
+      <button id="undoOver" type="button" class="ghostbtn">Undo last move</button>
+    </div>
+  </div>
+  <div class="tray" id="tray"></div>
+  <p class="hint">Drag pieces onto the board. Fill a row or column to clear it.</p>
+</div>
+
+<script>
+(()=>{
+const N=8;
+const COLORS=['#e4572e','#f3a712','#2fae6f','#2d7dd2','#8a52d6','#e0457b','#16a6b6'];
+const SHAPES=[
+ ["X"],["XX"],["X","X"],["XXX"],["X","X","X"],["XXXX"],["X","X","X","X"],["XXXXX"],["X","X","X","X","X"],
+ ["XX","XX"],["XX","XX"],["XXX","XXX","XXX"],["XXX","XXX"],["XX","XX","XX"],
+ ["XX","X."],["XX",".X"],["X.","XX"],[".X","XX"],
+ ["X..","X..","XXX"],["..X","..X","XXX"],["XXX","X..","X.."],["XXX","..X","..X"],
+ ["X.","X.","XX"],[".X",".X","XX"],["XX","X.","X."],["XX",".X",".X"],["XXX","X.."],["XXX","..X"],["X..","XXX"],["..X","XXX"],
+ ["XXX",".X."],[".X.","XXX"],["X.","XX","X."],[".X","XX",".X"],
+ ["XX.",".XX"],[".XX","XX."],["X.","XX",".X"],[".X","XX","X."],
+ ["X.",".X"],[".X","X."]
+].map(rows=>{const cells=[];rows.forEach((r,i)=>[...r].forEach((ch,j)=>{if(ch==="X")cells.push([i,j])}));return {cells,h:rows.length,w:rows[0].length}});
+
+const $=id=>document.getElementById(id);
+const boardEl=$('board'),trayEl=$('tray'),scoreEl=$('score'),bestEl=$('best'),comboEl=$('combo'),toastEl=$('toast');
+let S; // state
+let best=0;
+let hist=[]; // previous states for undo, newest last
+const HIST_MAX=30;
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+
+function randPiece(){const s=SHAPES[Math.floor(Math.random()*SHAPES.length)];return {...s,color:Math.floor(Math.random()*COLORS.length)}}
+function fitsAt(b,p,r,c){for(const[dr,dc]of p.cells){const rr=r+dr,cc=c+dc;if(rr<0||cc<0||rr>=N||cc>=N||b[rr*N+cc]!==null)return false}return true}
+function fitsAny(b,p){for(let r=0;r<=N-p.h;r++)for(let c=0;c<=N-p.w;c++)if(fitsAt(b,p,r,c))return true;return false}
+// Place a piece on a copy of the board and clear any completed lines
+function applyPlace(b,p,r,c){
+  const nb=b.slice();
+  p.cells.forEach(([dr,dc])=>nb[(r+dr)*N+c+dc]=0);
+  const {rows,cols}=fullLines(nb);
+  rows.forEach(rr=>{for(let cc=0;cc<N;cc++)nb[rr*N+cc]=null});
+  cols.forEach(cc=>{for(let rr=0;rr<N;rr++)nb[rr*N+cc]=null});
+  return nb;
+}
+// Can every piece be placed, in some order, starting from board b?
+function solvable(b,pieces,budget){
+  if(!pieces.length)return true;
+  const seen=new Set();
+  for(let i=0;i<pieces.length;i++){
+    const p=pieces[i],key=JSON.stringify(p.cells);
+    if(seen.has(key))continue;seen.add(key);
+    const rest=pieces.filter((_,j)=>j!==i);
+    for(let r=0;r<=N-p.h;r++)for(let c=0;c<=N-p.w;c++){
+      if(--budget.n<0)return false;
+      if(fitsAt(b,p,r,c)&&solvable(applyPlace(b,p,r,c),rest,budget))return true;
+    }
+  }
+  return false;
+}
+function shuffled(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+// Build a trio that is guaranteed playable by simulating each placement in turn
+function constructTrio(board){
+  let b=board.slice();const out=[];
+  for(let k=0;k<3;k++){
+    const s=shuffled(SHAPES).find(sh=>fitsAny(b,sh))||SHAPES[0];
+    const spots=[];for(let r=0;r<=N-s.h;r++)for(let c=0;c<=N-s.w;c++)if(fitsAt(b,s,r,c))spots.push([r,c]);
+    const [r,c]=spots[Math.floor(Math.random()*spots.length)];
+    b=applyPlace(b,s,r,c);
+    out.push({...s,color:Math.floor(Math.random()*COLORS.length)});
+  }
+  return shuffled(out);
+}
+// Every deal can be fully placed, so a game only ends through the player's own choices
+function deal(){
+  for(let i=0;i<30;i++){
+    const t=[randPiece(),randPiece(),randPiece()];
+    if(solvable(S.board,t,{n:60000})){S.tray=t;return}
+  }
+  S.tray=constructTrio(S.board);
+}
+function newGame(){S={board:Array(N*N).fill(null),tray:[],score:0,combo:0,since:0,over:false};hist=[];deal();save();render()}
+function save(){store.set('blockris-state',JSON.stringify(S));store.set('blockris-best',String(best));store.set('blockris-hist',JSON.stringify(hist))}
+function undo(){
+  if(!hist.length)return;
+  S=JSON.parse(hist.pop());
+  cellEls.forEach(el=>el.classList.remove('pop'));
+  toastEl.classList.remove('show');
+  save();render();
+}
+
+function fullLines(b){
+  const rows=[],cols=[];
+  for(let r=0;r<N;r++){let f=true;for(let c=0;c<N;c++)if(b[r*N+c]===null){f=false;break}if(f)rows.push(r)}
+  for(let c=0;c<N;c++){let f=true;for(let r=0;r<N;r++)if(b[r*N+c]===null){f=false;break}if(f)cols.push(c)}
+  return {rows,cols};
+}
+
+// board cells
+const cellEls=[];
+for(let i=0;i<N*N;i++){const d=document.createElement('div');d.className='cell';boardEl.appendChild(d);cellEls.push(d)}
+
+function renderBoard(ghost){
+  let ghostSet=null,hot=new Set();
+  if(ghost){
+    ghostSet=new Set(ghost.p.cells.map(([dr,dc])=>(ghost.r+dr)*N+ghost.c+dc));
+    const tmp=S.board.slice();ghostSet.forEach(i=>tmp[i]=ghost.p.color);
+    const {rows,cols}=fullLines(tmp);
+    rows.forEach(r=>{for(let c=0;c<N;c++)hot.add(r*N+c)});cols.forEach(c=>{for(let r=0;r<N;r++)hot.add(r*N+c)});
+  }
+  for(let i=0;i<N*N;i++){
+    const el=cellEls[i],v=S.board[i];
+    if(el.classList.contains('pop'))continue;
+    el.className='cell';
+    if(v!==null){el.classList.add('filled');el.style.setProperty('--c',COLORS[v])}
+    else if(ghostSet&&ghostSet.has(i)){el.classList.add('ghost');el.style.setProperty('--c',COLORS[ghost.p.color])}
+    if(hot.has(i)){if(v===null&&ghostSet&&ghostSet.has(i)){el.classList.remove('ghost');el.classList.add('filled')}el.classList.add('hot');if(v===null)el.style.setProperty('--c',COLORS[ghost.p.color])}
+  }
+}
+function pieceEl(p,extra){
+  const g=document.createElement('div');g.className='piece'+(extra?' '+extra:'');
+  g.style.gridTemplateColumns=`repeat(${p.w},var(--s))`;
+  const set=new Set(p.cells.map(([r,c])=>r*p.w+c));
+  for(let i=0;i<p.w*p.h;i++){const d=document.createElement('div');if(set.has(i)){d.className='tile';d.style.setProperty('--c',COLORS[p.color])}else d.className='sp';g.appendChild(d)}
+  return g;
+}
+function renderTray(){
+  trayEl.innerHTML='';
+  S.tray.forEach((p,i)=>{
+    const s=document.createElement('div');s.className='slot';s.dataset.i=i;
+    if(p){s.appendChild(pieceEl(p));if(!fitsAny(S.board,p))s.classList.add('dead');s.addEventListener('pointerdown',startDrag)}
+    trayEl.appendChild(s);
+  });
+}
+function render(){
+  renderBoard();renderTray();
+  scoreEl.textContent=S.score;bestEl.textContent=best;
+  comboEl.textContent=S.combo>1?`Combo x${S.combo}`:'';
+  $('over').hidden=!S.over;
+  $('undo').disabled=!hist.length;$('undoOver').hidden=!hist.length;
+  if(S.over){$('final').textContent=S.score;$('overmsg').textContent=S.score>=best&&S.score>0?'New best score':'Final score'}
+}
+function toast(big,small){
+  toastEl.innerHTML=(small?`<small>${small}</small>`:'')+`<big>${big}</big>`;
+  toastEl.classList.remove('show');void toastEl.offsetWidth;toastEl.classList.add('show');
+}
+
+function place(i,r,c){
+  hist.push(JSON.stringify(S));if(hist.length>HIST_MAX)hist.shift();
+  const p=S.tray[i];
+  p.cells.forEach(([dr,dc])=>S.board[(r+dr)*N+c+dc]=p.color);
+  S.score+=p.cells.length;S.tray[i]=null;
+  const {rows,cols}=fullLines(S.board),lines=rows.length+cols.length;
+  if(lines){
+    S.combo+=1;S.since=0;
+    const pts=10*lines*(lines+1)/2*S.combo;S.score+=pts;
+    const clear=new Set();
+    rows.forEach(rr=>{for(let cc=0;cc<N;cc++)clear.add(rr*N+cc)});cols.forEach(cc=>{for(let rr=0;rr<N;rr++)clear.add(rr*N+cc)});
+    clear.forEach(k=>{const el=cellEls[k];el.className='cell filled pop';el.style.setProperty('--c',COLORS[S.board[k]]);S.board[k]=null});
+    setTimeout(()=>{clear.forEach(k=>cellEls[k].classList.remove('pop'));renderBoard()},340);
+    toast('+'+pts,S.combo>1?`Combo x${S.combo}`:(lines>1?`${lines} lines`:''));
+  }else{S.since+=1;if(S.since>=3)S.combo=0}
+  if(S.tray.every(x=>!x))deal();
+  if(S.score>best)best=S.score;
+  if(!S.tray.some(x=>x&&fitsAny(S.board,x)))S.over=true;
+  save();render();
+}
+
+// dragging
+let D=null;
+function metrics(){
+  const a=cellEls[0].getBoundingClientRect();
+  const gap=parseFloat(getComputedStyle(boardEl).columnGap)||4;
+  return {x0:a.left,y0:a.top,cs:a.width,step:a.width+gap};
+}
+function startDrag(e){
+  if(S.over)return;
+  const slot=e.currentTarget,i=+slot.dataset.i,p=S.tray[i];if(!p)return;
+  e.preventDefault();
+  const m=metrics();
+  const el=pieceEl(p,'drag');el.style.setProperty('--s',m.cs+'px');document.body.appendChild(el);
+  slot.classList.add('lifted');
+  D={i,p,el,slot,m,touch:e.pointerType!=='mouse',target:null};
+  moveDrag(e);
+  window.addEventListener('pointermove',moveDrag);
+  window.addEventListener('pointerup',endDrag);
+  window.addEventListener('pointercancel',endDrag);
+}
+function moveDrag(e){
+  if(!D)return;
+  const {m,p}=D,w=p.w*m.step,h=p.h*m.step;
+  const left=e.clientX-w/2,top=D.touch?e.clientY-h-48:e.clientY-h/2;
+  D.el.style.transform=`translate(${left}px,${top}px)`;
+  const c=Math.round((left-m.x0)/m.step),r=Math.round((top-m.y0)/m.step);
+  const ok=fitsAt(S.board,p,r,c);
+  const t=ok?{r,c}:null;
+  if((t&&D.target&&t.r===D.target.r&&t.c===D.target.c)||(!t&&!D.target))return;
+  D.target=t;renderBoard(t?{p,r,c}:null);
+}
+function endDrag(){
+  if(!D)return;
+  window.removeEventListener('pointermove',moveDrag);window.removeEventListener('pointerup',endDrag);window.removeEventListener('pointercancel',endDrag);
+  D.el.remove();D.slot.classList.remove('lifted');
+  const d=D;D=null;
+  if(d.target)place(d.i,d.target.r,d.target.c);else renderBoard();
+}
+
+// restart with in-page confirm
+const rb=$('restart');let armT=null;
+rb.addEventListener('click',()=>{
+  if(S.over||S.score===0||rb.classList.contains('armed')){clearTimeout(armT);rb.classList.remove('armed');rb.textContent='New game';newGame();return}
+  rb.classList.add('armed');rb.textContent='Tap to confirm';
+  armT=setTimeout(()=>{rb.classList.remove('armed');rb.textContent='New game'},2500);
+});
+$('again').addEventListener('click',newGame);
+$('undo').addEventListener('click',undo);
+$('undoOver').addEventListener('click',undo);
+window.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();undo()}});
+window.addEventListener('resize',()=>{if(D)endDrag()});
+
+// boot
+best=+store.get('blockris-best')||0;
+try{const h=JSON.parse(store.get('blockris-hist'));if(Array.isArray(h))hist=h.slice(-HIST_MAX)}catch(e){}
+try{const s=JSON.parse(store.get('blockris-state'));if(s&&Array.isArray(s.board)&&s.board.length===N*N&&Array.isArray(s.tray)){S=s;render()}else newGame()}catch(e){newGame()}
+})();
+</script>
+<script>
+if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('sw.js').catch(()=>{})})}
+</script>
+</body>
+</html>
