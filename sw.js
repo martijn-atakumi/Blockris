@@ -1,5 +1,5 @@
 // Blockris offline support: cache the app shell, serve it when offline.
-const CACHE = 'blockris-v7';
+const CACHE = 'blockris-v8';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
