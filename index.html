@@ -357,6 +357,7 @@ function renderTray(){
   });
 }
 function render(){
+  if(!D)sweepDragGhosts();
   renderBoard();renderTray();
   countTo(S.score);bestEl.textContent=fmt(best);
   comboEl.textContent=S.combo>1?`Combo x${S.combo}`:'';
@@ -433,21 +434,26 @@ function metrics(){
   const gap=parseFloat(getComputedStyle(boardEl).columnGap)||4;
   return {x0:a.left,y0:a.top,cs:a.width,step:a.width+gap};
 }
+// Only one piece can be dragged at a time, tracked by the finger (pointer) that picked it up.
+// A second finger, a cancelled touch or the app going to the background all end the drag
+// cleanly, and any floating copy left behind is swept away.
+function sweepDragGhosts(){document.querySelectorAll('.drag').forEach(el=>{if(!D||el!==D.el)el.remove()})}
 function startDrag(e){
-  if(S.over||!$('welcome').hidden)return;
+  if(D||S.over||!$('welcome').hidden)return;
   const slot=e.currentTarget,i=+slot.dataset.i,p=S.tray[i];if(!p)return;
   e.preventDefault();
+  sweepDragGhosts();
   const m=metrics();
   const el=pieceEl(p,'drag');el.style.setProperty('--s',m.cs+'px');document.body.appendChild(el);
   slot.classList.add('lifted');
-  D={i,p,el,slot,m,touch:e.pointerType!=='mouse',target:null};
+  D={i,p,el,slot,m,id:e.pointerId,touch:e.pointerType!=='mouse',target:null};
   moveDrag(e);
   window.addEventListener('pointermove',moveDrag);
-  window.addEventListener('pointerup',endDrag);
-  window.addEventListener('pointercancel',endDrag);
+  window.addEventListener('pointerup',onPointerEnd);
+  window.addEventListener('pointercancel',onPointerCancel);
 }
 function moveDrag(e){
-  if(!D)return;
+  if(!D||e.pointerId!==D.id)return;
   const {m,p}=D,w=p.w*m.step,h=p.h*m.step;
   const left=e.clientX-w/2,top=D.touch?e.clientY-h-48:e.clientY-h/2;
   D.el.style.transform=`translate(${left}px,${top}px)`;
@@ -457,13 +463,21 @@ function moveDrag(e){
   if((t&&D.target&&t.r===D.target.r&&t.c===D.target.c)||(!t&&!D.target))return;
   D.target=t;renderBoard(t?{p,r,c}:null);
 }
-function endDrag(){
-  if(!D)return;
-  window.removeEventListener('pointermove',moveDrag);window.removeEventListener('pointerup',endDrag);window.removeEventListener('pointercancel',endDrag);
-  D.el.remove();D.slot.classList.remove('lifted');
+function onPointerEnd(e){if(D&&e.pointerId===D.id)endDrag(true)}
+function onPointerCancel(e){if(D&&e.pointerId===D.id)endDrag(false)}
+// drop=true places the piece if it is over a valid spot; false just puts it back in the tray
+function endDrag(drop){
+  window.removeEventListener('pointermove',moveDrag);
+  window.removeEventListener('pointerup',onPointerEnd);
+  window.removeEventListener('pointercancel',onPointerCancel);
+  if(!D){sweepDragGhosts();return}
   const d=D;D=null;
-  if(d.target)place(d.i,d.target.r,d.target.c);else renderBoard();
+  d.el.remove();d.slot.classList.remove('lifted');
+  sweepDragGhosts();
+  if(drop&&d.target)place(d.i,d.target.r,d.target.c);else{renderBoard();renderTray()}
 }
+window.addEventListener('blur',()=>endDrag(false));
+document.addEventListener('visibilitychange',()=>{if(document.hidden)endDrag(false)});
 
 // restart with in-page confirm
 const rb=$('restart');let armT=null;
@@ -476,7 +490,7 @@ $('again').addEventListener('click',newGame);
 $('undo').addEventListener('click',undo);
 $('undoOver').addEventListener('click',undo);
 window.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();undo()}});
-window.addEventListener('resize',()=>{if(D)endDrag()});
+window.addEventListener('resize',()=>{if(D)endDrag(false)});
 
 // pohutukawa blossoms: a burst of crimson stamens tipped with gold
 document.querySelectorAll('[data-bloom]').forEach(svg=>{
