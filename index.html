@@ -26,21 +26,29 @@ body{margin:0;font:14px system-ui,-apple-system,"Segoe UI",sans-serif;overscroll
    Deliberately a single bright summer theme, so every colour is set explicitly. */
 :root{
   --sky:#bfe8f2; --sand:#f7e4bb; --ink:#1f2a3a; --muted:#5a6676;
-  --sea:#0b6475; --sea-well:#127b8e; --foam:#ffffff;
+  --sea:#084a57; --sea-well:#0d6070; --foam:#ffffff;
   --pohutukawa:#d7263d; --leaf:#3f7d3a; --sun:#ffb703;
   --panel:rgba(9,58,70,.94);
   --display:"Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif;
   --body:"Nunito",system-ui,-apple-system,"Segoe UI",sans-serif;
-  --gap:4px;
+  --gap:2px;
 }
 html,body{height:100%}
 body{background:var(--sand);background-image:linear-gradient(180deg,var(--sky) 0%,#e3f2e9 45%,var(--sand) 78%);color:var(--ink);font-family:var(--body);overflow:hidden;
   -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:none}
-/* rolling waves along the bottom edge */
-body::after{content:"";position:fixed;left:0;right:0;bottom:0;height:calc(34px + env(safe-area-inset-bottom,0px));z-index:0;pointer-events:none;
-  background:radial-gradient(circle at 20px -6px,transparent 22px,#6cc3cf 23px) 0 0/40px 34px repeat-x}
+/* rolling waves along the bottom edge: a slow back swell and a quicker front wave */
+body::before,body::after{content:"";position:fixed;left:-60px;right:-60px;bottom:0;z-index:0;pointer-events:none}
+body::before{height:calc(50px + env(safe-area-inset-bottom,0px));
+  background:radial-gradient(circle at 28px -8px,transparent 30px,#3fa3b4 31px) 0 0/56px 50px repeat-x;
+  animation:swellBack 7s linear infinite,bob 3.5s ease-in-out infinite alternate}
+body::after{height:calc(34px + env(safe-area-inset-bottom,0px));
+  background:radial-gradient(circle at 20px -6px,transparent 22px,#7fd0da 23px) 0 0/40px 34px repeat-x;
+  animation:swellFront 4s linear infinite,bob 2.6s ease-in-out infinite alternate-reverse}
+@keyframes swellBack{to{background-position-x:-56px}}
+@keyframes swellFront{to{background-position-x:40px}}
+@keyframes bob{from{transform:translateY(0)}to{transform:translateY(5px)}}
 .app{position:relative;z-index:1;height:100%;max-width:480px;margin:0 auto;display:flex;flex-direction:column;gap:10px;
-  padding-block:10px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+  padding-block:10px 54px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 header{position:relative;display:flex;align-items:center;justify-content:space-between;gap:12px}
 .brand{position:relative;display:flex;flex-direction:column;gap:0}
 .eyebrow{font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.14em;color:var(--leaf)}
@@ -61,12 +69,14 @@ button.armed{background:var(--pohutukawa);border-color:var(--pohutukawa);color:#
 .best{text-align:right}
 .best b{display:block;font-family:var(--display);font-weight:400;font-size:1.3rem;font-variant-numeric:tabular-nums;color:var(--ink)}
 .combo{font-size:.8rem;font-weight:800;color:var(--pohutukawa);min-height:1.1em}
-.boardwrap{position:relative;align-self:center;width:min(100%,54dvh);max-width:100%}
-.board{display:grid;grid-template-columns:repeat(8,1fr);gap:var(--gap);padding:7px;background:var(--sea);
+/* score, board and pieces sit together as one group, centred in the space below the header */
+.play{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:12px}
+.boardwrap{position:relative;align-self:center;width:min(100%,52dvh);max-width:100%}
+.board{display:grid;grid-template-columns:repeat(8,1fr);gap:var(--gap);padding:5px;background:var(--sea);
   border-radius:16px;aspect-ratio:1;border:3px solid var(--foam);box-shadow:0 12px 26px -12px rgba(11,70,85,.55)}
-.cell{border-radius:6px;background:var(--sea-well);box-shadow:inset 0 2px 3px rgba(0,0,0,.18)}
-.tile,.cell.filled{background:var(--c);box-shadow:inset 0 -3px 0 rgba(0,0,0,.22),inset 0 2px 0 rgba(255,255,255,.5)}
-.cell.ghost{background:var(--c);opacity:.5;box-shadow:none}
+.cell{border-radius:3px;background:var(--sea-well);box-shadow:inset 0 1px 2px rgba(0,0,0,.25)}
+.tile,.cell.filled{background:var(--c);box-shadow:inset 0 0 0 1px rgba(0,0,0,.18),inset 0 -3px 0 rgba(0,0,0,.25),inset 0 2px 0 rgba(255,255,255,.55)}
+.cell.ghost{background:var(--c);opacity:.6;box-shadow:inset 0 0 0 2px rgba(255,255,255,.7)}
 .cell.hot{filter:brightness(1.25) saturate(1.15)}
 .cell.pop{animation:pop .32s ease-in forwards}
 @keyframes pop{0%{transform:scale(1);filter:brightness(1.8)}100%{transform:scale(.2);opacity:0}}
@@ -74,11 +84,11 @@ button.armed{background:var(--pohutukawa);border-color:var(--pohutukawa);color:#
   animation:petal .9s ease-out forwards}
 .petal.gold{background:var(--sun);width:5px;height:5px;border-radius:50%}
 @keyframes petal{0%{transform:translate(0,0) rotate(0) scale(1);opacity:1}100%{transform:translate(var(--dx),var(--dy)) rotate(var(--rot)) scale(.6);opacity:0}}
-.tray{flex:1;min-height:110px;display:grid;grid-template-columns:repeat(3,1fr);align-items:center;justify-items:center}
+.tray{height:clamp(110px,18dvh,150px);display:grid;grid-template-columns:repeat(3,1fr);align-items:center;justify-items:center}
 .slot{width:100%;height:100%;display:flex;align-items:center;justify-content:center;cursor:grab;touch-action:none}
-.piece{display:grid;gap:3px}
-.piece .tile,.piece .sp{width:var(--s);height:var(--s);border-radius:5px}
-.slot .piece{--s:clamp(14px,4.4vw,22px)}
+.piece{display:grid;gap:2px}
+.piece .tile,.piece .sp{width:var(--s);height:var(--s);border-radius:3px}
+.slot .piece{--s:clamp(16px,5vw,24px)}
 .slot.dead .piece{opacity:.3;filter:grayscale(.8)}
 .slot.lifted .piece{visibility:hidden}
 .drag{position:fixed;left:0;top:0;z-index:50;pointer-events:none;gap:var(--gap);filter:drop-shadow(0 8px 10px rgba(11,70,85,.35))}
@@ -113,6 +123,7 @@ button.armed{background:var(--pohutukawa);border-color:var(--pohutukawa);color:#
   100%{opacity:0;transform:translate(-50%,-90%) scale(.9)}}
 .board.jolt{animation:jolt .4s ease-out}
 @keyframes jolt{0%,100%{transform:translate(0,0)}20%{transform:translate(-5px,2px) rotate(-.6deg)}40%{transform:translate(5px,-2px) rotate(.6deg)}60%{transform:translate(-3px,1px)}80%{transform:translate(2px,0)}}
+@media (prefers-reduced-motion:reduce){body::before,body::after{animation:none}}
 @media (prefers-reduced-motion:reduce){.combo.bump,.board.jolt,.toast.combo.show{animation:none}.toast.combo.show{opacity:1}}
 @media (prefers-reduced-motion:reduce){.cell.pop{animation:none;opacity:0}.toast.show{animation:none;opacity:1}.petal{display:none}}
 </style>
@@ -131,6 +142,7 @@ button.armed{background:var(--pohutukawa);border-color:var(--pohutukawa);color:#
       <button id="restart" type="button">New game</button>
     </div>
   </header>
+  <div class="play">
   <div class="scores">
     <div><div class="label">Score</div><div class="score" id="score">0</div><div class="combo" id="combo"></div></div>
     <div class="best"><div class="label">Best</div><b id="best">0</b></div>
@@ -156,6 +168,7 @@ button.armed{background:var(--pohutukawa);border-color:var(--pohutukawa);color:#
     </div>
   </div>
   <div class="tray" id="tray"></div>
+  </div>
 </div>
 
 <script>
@@ -180,20 +193,62 @@ const boardEl=$('board'),trayEl=$('tray'),scoreEl=$('score'),bestEl=$('best'),co
 let S; // state
 let best=0;
 let hist=[]; // previous states for undo, newest last
-const HIST_MAX=2;
+const HIST_MAX=2,UNDOS_PER_GAME=2;
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 
-function randPiece(){const s=SHAPES[Math.floor(Math.random()*SHAPES.length)];return {...s,color:Math.floor(Math.random()*COLORS.length)}}
+// Piece mix: favour the friendly middle sizes, keep the big awkward ones rare
+const SIZE_WEIGHT={1:5,2:14,3:22,4:33,5:14,6:7,9:5};
+const WEIGHTED=(()=>{
+  const groups={};SHAPES.forEach(s=>{(groups[s.cells.length]=groups[s.cells.length]||[]).push(s)});
+  const list=[];let total=0;
+  Object.keys(groups).forEach(k=>{const g=groups[k],w=(SIZE_WEIGHT[k]||5)/g.length;g.forEach(s=>{total+=w;list.push([total,s])})});
+  return {list,total};
+})();
+function randShape(){const x=Math.random()*WEIGHTED.total;return WEIGHTED.list.find(([t])=>x<t)[1]}
+function randPiece(){return {...randShape(),color:Math.floor(Math.random()*COLORS.length)}}
 function fitsAt(b,p,r,c){for(const[dr,dc]of p.cells){const rr=r+dr,cc=c+dc;if(rr<0||cc<0||rr>=N||cc>=N||b[rr*N+cc]!==null)return false}return true}
 function fitsAny(b,p){for(let r=0;r<=N-p.h;r++)for(let c=0;c<=N-p.w;c++)if(fitsAt(b,p,r,c))return true;return false}
-// Place a piece on a copy of the board and clear any completed lines
-function applyPlace(b,p,r,c){
+// Place a piece on a copy of the board, clear completed lines, report how many cleared
+function placeEval(b,p,r,c){
   const nb=b.slice();
   p.cells.forEach(([dr,dc])=>nb[(r+dr)*N+c+dc]=0);
   const {rows,cols}=fullLines(nb);
   rows.forEach(rr=>{for(let cc=0;cc<N;cc++)nb[rr*N+cc]=null});
   cols.forEach(cc=>{for(let rr=0;rr<N;rr++)nb[rr*N+cc]=null});
-  return nb;
+  return {nb,lines:rows.length+cols.length};
+}
+function applyPlace(b,p,r,c){return placeEval(b,p,r,c).nb}
+// How roomy a board is: empty cells, minus single-cell holes nothing big can use
+function roominess(b){
+  let empty=0,holes=0;
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+    if(b[r*N+c]!==null)continue;empty++;
+    const open=(r>0&&b[(r-1)*N+c]===null)||(r<N-1&&b[(r+1)*N+c]===null)||(c>0&&b[r*N+c-1]===null)||(c<N-1&&b[r*N+c+1]===null);
+    if(!open)holes++;
+  }
+  return empty-2*holes;
+}
+// Best spot for one piece by a sensible player's judgement
+function bestSpot(b,p){
+  let best=null;
+  for(let r=0;r<=N-p.h;r++)for(let c=0;c<=N-p.w;c++){
+    if(!fitsAt(b,p,r,c))continue;
+    const e=placeEval(b,p,r,c),v=e.lines*20+roominess(e.nb);
+    if(!best||v>best.v)best={r,c,v,nb:e.nb,lines:e.lines};
+  }
+  return best;
+}
+const PERMS=[[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]];
+// How forgiving a trio is: play it in every order a person might pick and average
+// the outcomes. Orders that dead-end count heavily against it.
+function trioOutlook(b,t){
+  let sum=0,anyOk=false;
+  for(const perm of PERMS){
+    let bb=b,lines=0,ok=true;
+    for(const i of perm){const s=bestSpot(bb,t[i]);if(!s){ok=false;break}bb=s.nb;lines+=s.lines}
+    if(ok){anyOk=true;sum+=lines*12+roominess(bb)}else sum-=60;
+  }
+  return anyOk?{v:sum/6}:null;
 }
 // Can every piece be placed, in some order, starting from board b?
 function solvable(b,pieces,budget){
@@ -215,27 +270,44 @@ function shuffled(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floo
 function constructTrio(board){
   let b=board.slice();const out=[];
   for(let k=0;k<3;k++){
-    const s=shuffled(SHAPES).find(sh=>fitsAny(b,sh))||SHAPES[0];
-    const spots=[];for(let r=0;r<=N-s.h;r++)for(let c=0;c<=N-s.w;c++)if(fitsAt(b,s,r,c))spots.push([r,c]);
-    const [r,c]=spots[Math.floor(Math.random()*spots.length)];
-    b=applyPlace(b,s,r,c);
+    const s=shuffled(SHAPES).filter(sh=>sh.cells.length<=4).find(sh=>fitsAny(b,sh))||SHAPES[0];
+    const spot=bestSpot(b,s);b=spot.nb;
     out.push({...s,color:Math.floor(Math.random()*COLORS.length)});
   }
   return shuffled(out);
 }
-// Every deal can be fully placed, so a game only ends through the player's own choices
+// Deal three pieces. Every deal can be fully placed. The dealer looks at a batch of
+// random trios and prefers ones that stay playable whatever order you use them in.
+// The fuller the board, the harder it leans towards pieces that open it back up,
+// so careful play keeps you going further and further. Very long games slowly ease
+// off the help so a run still ends through your own choices.
 function deal(){
-  for(let i=0;i<30;i++){
-    const t=[randPiece(),randPiece(),randPiece()];
-    if(solvable(S.board,t,{n:60000})){S.tray=t;return}
+  const filled=S.board.reduce((n,v)=>n+(v!==null),0)/(N*N);
+  const help=Math.max(0,Math.min(1,(filled-0.15)/0.3));
+  const ease=Math.max(0.5,1-(S.dealt||0)/400);
+  S.dealt=(S.dealt||0)+1;
+  const cands=[];
+  for(let i=0;i<20;i++){
+    const t=[randPiece(),randPiece(),randPiece()],o=trioOutlook(S.board,t);
+    if(o)cands.push({t,v:o.v});
   }
+  if(cands.length){
+    cands.sort((a,b)=>b.v-a.v);
+    const pickBest=Math.random()<(0.4+0.6*help)*ease;
+    const pool=pickBest?1:Math.max(1,Math.ceil(cands.length/2));
+    S.tray=cands[Math.floor(Math.random()*pool)].t;return;
+  }
+  for(let i=0;i<20;i++){const t=[randPiece(),randPiece(),randPiece()];if(solvable(S.board,t,{n:60000})){S.tray=t;return}}
   S.tray=constructTrio(S.board);
 }
-function newGame(){S={board:Array(N*N).fill(null),tray:[],score:0,combo:0,since:0,over:false};hist=[];deal();save();render()}
+function newGame(){S={board:Array(N*N).fill(null),tray:[],score:0,combo:0,since:0,over:false,undos:UNDOS_PER_GAME};hist=[];deal();save();render()}
 function save(){store.set('blockris-state',JSON.stringify(S));store.set('blockris-best',String(best));store.set('blockris-hist',JSON.stringify(hist))}
+function undosLeft(){return S.undos===undefined?UNDOS_PER_GAME:S.undos}
+// Two undos per game; each one steps back a single move
 function undo(){
-  if(!hist.length)return;
-  S=JSON.parse(hist.pop());
+  if(!hist.length||undosLeft()<=0)return;
+  const left=undosLeft()-1;
+  S=JSON.parse(hist.pop());S.undos=left;
   cellEls.forEach(el=>el.classList.remove('pop'));
   toastEl.classList.remove('show');
   save();render();
@@ -289,7 +361,7 @@ function render(){
   countTo(S.score);bestEl.textContent=fmt(best);
   comboEl.textContent=S.combo>1?`Combo x${S.combo}`:'';
   $('over').hidden=!S.over;
-  $('undo').disabled=!hist.length;$('undoOver').hidden=!hist.length;
+  const canUndo=hist.length>0&&undosLeft()>0;$('undo').disabled=!canUndo;$('undo').textContent=`Undo (${undosLeft()})`;$('undoOver').hidden=!canUndo;$('undoOver').textContent=`Undo last move (${undosLeft()} left)`;
   if(S.over){$('final').textContent=fmt(S.score);$('overmsg').textContent=S.score>=best&&S.score>0?'New best score':'Final score'}
 }
 const fmt=n=>Math.round(n).toLocaleString('en-NZ');
