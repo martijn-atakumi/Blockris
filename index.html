@@ -84,6 +84,14 @@ button.armed{background:var(--pohutukawa);border-color:var(--pohutukawa);color:#
   animation:petal .9s ease-out forwards}
 .petal.gold{background:var(--sun);width:5px;height:5px;border-radius:50%}
 @keyframes petal{0%{transform:translate(0,0) rotate(0) scale(1);opacity:1}100%{transform:translate(var(--dx),var(--dy)) rotate(var(--rot)) scale(.6);opacity:0}}
+.traywrap{position:relative}
+.chance{position:absolute;left:50%;top:-6px;transform:translateX(-50%);z-index:2;white-space:nowrap;pointer-events:none;
+  font:800 .74rem var(--body);text-transform:uppercase;letter-spacing:.12em;color:var(--ink);
+  background:linear-gradient(100deg,var(--sun) 0%,#ffe08a 45%,var(--sun) 60%) 0 0/250% 100%;padding:5px 12px;border-radius:999px;
+  box-shadow:0 2px 0 #b07d00;animation:shimmer 1.8s linear infinite}
+@keyframes shimmer{to{background-position:-250% 0}}
+.board.shine{animation:shine 1.2s ease-out}
+@keyframes shine{0%{box-shadow:0 0 0 0 rgba(255,196,61,.9),0 12px 26px -12px rgba(11,70,85,.55)}40%{box-shadow:0 0 0 14px rgba(255,196,61,.45),0 0 40px 10px rgba(255,196,61,.6)}100%{box-shadow:0 0 0 24px rgba(255,196,61,0),0 12px 26px -12px rgba(11,70,85,.55)}}
 .tray{height:clamp(110px,18dvh,150px);display:grid;grid-template-columns:repeat(3,1fr);align-items:center;justify-items:center}
 .slot{width:100%;height:100%;display:flex;align-items:center;justify-content:center;cursor:grab;touch-action:none}
 .piece{display:grid;gap:2px}
@@ -123,7 +131,7 @@ button.armed{background:var(--pohutukawa);border-color:var(--pohutukawa);color:#
   100%{opacity:0;transform:translate(-50%,-90%) scale(.9)}}
 .board.jolt{animation:jolt .4s ease-out}
 @keyframes jolt{0%,100%{transform:translate(0,0)}20%{transform:translate(-5px,2px) rotate(-.6deg)}40%{transform:translate(5px,-2px) rotate(.6deg)}60%{transform:translate(-3px,1px)}80%{transform:translate(2px,0)}}
-@media (prefers-reduced-motion:reduce){body::before,body::after{animation:none}}
+@media (prefers-reduced-motion:reduce){body::before,body::after,.chance,.board.shine{animation:none}}
 @media (prefers-reduced-motion:reduce){.combo.bump,.board.jolt,.toast.combo.show{animation:none}.toast.combo.show{opacity:1}}
 @media (prefers-reduced-motion:reduce){.cell.pop{animation:none;opacity:0}.toast.show{animation:none;opacity:1}.petal{display:none}}
 </style>
@@ -167,7 +175,7 @@ button.armed{background:var(--pohutukawa);border-color:var(--pohutukawa);color:#
       <button id="installW" type="button" class="ghostbtn" hidden>Add to home screen</button>
     </div>
   </div>
-  <div class="tray" id="tray"></div>
+  <div class="traywrap"><div class="chance" id="chance" hidden>Board clear possible</div><div class="tray" id="tray"></div></div>
   </div>
 </div>
 
@@ -193,7 +201,7 @@ const boardEl=$('board'),trayEl=$('tray'),scoreEl=$('score'),bestEl=$('best'),co
 let S; // state
 let best=0;
 let hist=[]; // previous states for undo, newest last
-const HIST_MAX=2,UNDOS_PER_GAME=2;
+const HIST_MAX=2,UNDOS_PER_GAME=2,ALL_CLEAR_BONUS=5000;
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 
 // Piece mix: favour the friendly middle sizes, keep the big awkward ones rare
@@ -282,6 +290,10 @@ function constructTrio(board){
 // so careful play keeps you going further and further. Very long games slowly ease
 // off the help so a run still ends through your own choices.
 function deal(){
+  // When the board can be emptied in one go, usually hand over exactly those pieces
+  const ac=findClearTrio(S.board);
+  if(ac&&Math.random()<0.85){S.tray=ac;S.dealt=(S.dealt||0)+1;S.clearChance=true;return}
+  S.clearChance=false;
   const filled=S.board.reduce((n,v)=>n+(v!==null),0)/(N*N);
   const help=Math.max(0,Math.min(1,(filled-0.15)/0.3));
   const ease=Math.max(0.5,1-(S.dealt||0)/400);
@@ -299,6 +311,78 @@ function deal(){
   }
   for(let i=0;i<20;i++){const t=[randPiece(),randPiece(),randPiece()];if(solvable(S.board,t,{n:60000})){S.tray=t;return}}
   S.tray=constructTrio(S.board);
+}
+// All clear: look for up to three pieces that would empty the board completely.
+// We choose a set of rows and columns that covers every filled square, then try to
+// fill exactly the gaps in those lines with real pieces, and check the clears play out.
+function findClearTrio(board){
+  const F=[];for(let i=0;i<N*N;i++)if(board[i]!==null)F.push(i);
+  if(!F.length||F.length>32)return null;
+  const rows=[...new Set(F.map(i=>i/N|0))];
+  if(rows.length>7)return null;
+  const budget={n:40000};
+  const masks=shuffled([...Array(1<<rows.length).keys()]);
+  for(const mask of masks){
+    const useRows=rows.filter((_,k)=>mask&(1<<k));
+    const useCols=[...new Set(F.filter(i=>!useRows.includes(i/N|0)).map(i=>i%N))];
+    const lineCells=new Set();
+    useRows.forEach(r=>{for(let c=0;c<N;c++)lineCells.add(r*N+c)});
+    useCols.forEach(c=>{for(let r=0;r<N;r++)lineCells.add(r*N+c)});
+    const gap=[...lineCells].filter(i=>board[i]===null);
+    if(!gap.length||gap.length>18)continue;
+    const tiling=tileGap(new Set(gap),[],budget);
+    if(budget.n<0)return null;
+    if(!tiling)continue;
+    const order=clearOrder(board,tiling);
+    if(!order)continue;
+    // pad to three pieces with small ones that will fit on the emptied board
+    const pieces=order.map(t=>({...t.shape,color:Math.floor(Math.random()*COLORS.length)}));
+    while(pieces.length<3){const small=SHAPES.filter(s=>s.cells.length<=3);pieces.push({...small[Math.floor(Math.random()*small.length)],color:Math.floor(Math.random()*COLORS.length)})}
+    return shuffled(pieces);
+  }
+  return null;
+}
+// Cover every gap square exactly with at most three pieces
+function tileGap(gap,placed,budget){
+  if(!gap.size)return placed;
+  if(placed.length===3||--budget.n<0)return null;
+  const first=Math.min(...gap),fr=first/N|0,fc=first%N;
+  for(const s of shuffled(SHAPES)){
+    for(const [dr,dc] of s.cells){
+      const r0=fr-dr,c0=fc-dc;let ok=true;const cells=[];
+      for(const [a,b] of s.cells){const r=r0+a,c=c0+b;if(r<0||c<0||r>=N||c>=N||!gap.has(r*N+c)){ok=false;break}cells.push(r*N+c)}
+      if(!ok)continue;
+      const rest=new Set(gap);cells.forEach(x=>rest.delete(x));
+      const res=tileGap(rest,[...placed,{shape:s,r:r0,c:c0}],budget);
+      if(res)return res;
+      if(budget.n<0)return null;
+    }
+  }
+  return null;
+}
+// Find an order of placing the pieces that leaves the board completely empty
+function clearOrder(board,tiles){
+  const perms=tiles.length===3?PERMS:tiles.length===2?[[0,1],[1,0]]:[[0]];
+  for(const perm of perms){
+    let b=board,ok=true;
+    for(const k of perm){const t=tiles[k];if(!fitsAt(b,t.shape,t.r,t.c)){ok=false;break}b=applyPlace(b,t.shape,t.r,t.c)}
+    if(ok&&b.every(v=>v===null))return perm.map(k=>tiles[k]);
+  }
+  return null;
+}
+// Can the pieces still in the tray empty the board? (checks the hint is still true)
+function canAllClear(b,t,budget={n:30000}){
+  for(let i=0;i<t.length;i++){
+    const p=t[i],rest=t.filter((_,j)=>j!==i);
+    for(let r=0;r<=N-p.h;r++)for(let c=0;c<=N-p.w;c++){
+      if(--budget.n<0)return false;
+      if(!fitsAt(b,p,r,c))continue;
+      const nb=applyPlace(b,p,r,c);
+      if(nb.every(v=>v===null))return true;
+      if(rest.length&&canAllClear(nb,rest,budget))return true;
+    }
+  }
+  return false;
 }
 function newGame(){S={board:Array(N*N).fill(null),tray:[],score:0,combo:0,since:0,over:false,undos:UNDOS_PER_GAME};hist=[];deal();save();render()}
 function save(){store.set('blockris-state',JSON.stringify(S));store.set('blockris-best',String(best));store.set('blockris-hist',JSON.stringify(hist))}
@@ -362,7 +446,7 @@ function render(){
   countTo(S.score);bestEl.textContent=fmt(best);
   comboEl.textContent=S.combo>1?`Combo x${S.combo}`:'';
   $('over').hidden=!S.over;
-  const canUndo=hist.length>0&&undosLeft()>0;$('undo').disabled=!canUndo;$('undo').textContent=`Undo (${undosLeft()})`;$('undoOver').hidden=!canUndo;$('undoOver').textContent=`Undo last move (${undosLeft()} left)`;
+  $('chance').hidden=!S.clearChance||S.over;const canUndo=hist.length>0&&undosLeft()>0;$('undo').disabled=!canUndo;$('undo').textContent=`Undo (${undosLeft()})`;$('undoOver').hidden=!canUndo;$('undoOver').textContent=`Undo last move (${undosLeft()} left)`;
   if(S.over){$('final').textContent=fmt(S.score);$('overmsg').textContent=S.score>=best&&S.score>0?'New best score':'Final score'}
 }
 const fmt=n=>Math.round(n).toLocaleString('en-NZ');
@@ -417,11 +501,19 @@ function place(i,r,c){
     rows.forEach(rr=>{for(let cc=0;cc<N;cc++)clear.add(rr*N+cc)});cols.forEach(cc=>{for(let rr=0;rr<N;rr++)clear.add(rr*N+cc)});
     clear.forEach(k=>{const el=cellEls[k];el.className='cell filled pop';el.style.setProperty('--c',COLORS[S.board[k]]);S.board[k]=null});
     setTimeout(()=>{clear.forEach(k=>cellEls[k].classList.remove('pop'));renderBoard()},340);
-    petals(clear,S.combo);
-    if(S.combo>1){toast('+'+fmt(pts),`Combo x${S.combo}`,S.combo);celebrateCombo(S.combo)}
-    else toast('+'+fmt(pts),CHEERS[Math.min(lines,CHEERS.length)-1]);
+    if(S.board.every(v=>v===null)){
+      // the whole board is empty: big bonus and the full celebration
+      const bonus=ALL_CLEAR_BONUS*Math.max(1,S.combo);S.score+=bonus;S.allClears=(S.allClears||0)+1;
+      petals(new Set(cellEls.map((_,k)=>k)),8);
+      toast('+'+fmt(pts+bonus),'Board cleared!',6);celebrateCombo(Math.max(3,S.combo));restart(boardEl,'shine');
+    }else{
+      petals(clear,S.combo);
+      if(S.combo>1){toast('+'+fmt(pts),`Combo x${S.combo}`,S.combo);celebrateCombo(S.combo)}
+      else toast('+'+fmt(pts),CHEERS[Math.min(lines,CHEERS.length)-1]);
+    }
   }else{S.since+=1;if(S.since>=3)S.combo=0}
   if(S.tray.every(x=>!x))deal();
+  else if(S.clearChance)S.clearChance=canAllClear(S.board,S.tray.filter(Boolean));
   if(S.score>best)best=S.score;
   if(!S.tray.some(x=>x&&fitsAny(S.board,x)))S.over=true;
   save();render();
