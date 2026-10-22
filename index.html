@@ -501,6 +501,8 @@ const HIST_MAX=2,UNDOS_PER_GAME=2,ALL_CLEAR_BONUS=5000;
 const CLEAR_ODDS_START=0.6,CLEAR_ODDS_DECAY=0.8,CLEAR_ODDS_FLOOR=0.06;
 // Lucky streaks: chance per deal of starting one, and how many deals it lasts
 const LUCKY_CHANCE=0.05,LUCKY_LENGTH=3;
+// Puzzle deals: start appearing at 40% full, always at 60%; from 55% full only one order works
+const TIGHT_FROM=0.4,TIGHT_SPAN=0.2,ONE_ORDER_FROM=0.55,PUZZLE_BUDGET=400000;
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 
 // Piece mix: favour the friendly middle sizes, keep the big awkward ones rare
@@ -588,6 +590,38 @@ function constructTrio(board){
 // The fuller the board, the harder it leans towards pieces that open it back up,
 // so careful play keeps you going further and further. Very long games slowly ease
 // off the help so a run still ends through your own choices.
+// How many different orders of these three pieces can all be placed on board b?
+const shapeKey=p=>p.cells.join(';');
+function placeableInOrder(b,list,budget){
+  if(!list.length)return true;
+  const p=list[0],rest=list.slice(1);
+  for(let r=0;r<=N-p.h;r++)for(let c=0;c<=N-p.w;c++){
+    if(--budget.n<0)return false;
+    if(fitsAt(b,p,r,c)&&placeableInOrder(applyPlace(b,p,r,c),rest,budget))return true;
+  }
+  return false;
+}
+function workingOrders(b,t,budget){
+  const seen=new Set();let ok=0;
+  for(const perm of PERMS){
+    const key=perm.map(i=>shapeKey(t[i])).join('|');if(seen.has(key))continue;seen.add(key);
+    if(placeableInOrder(b,perm.map(i=>t[i]),budget))ok++;
+  }
+  return {ok,total:seen.size};
+}
+// Find a trio that fits in only a few orders (at most maxOrders), preferring the strictest
+function puzzleTrio(b,maxOrders){
+  const budget={n:PUZZLE_BUDGET};let best=null;
+  for(let k=0;k<40&&budget.n>0;k++){
+    const t=[randPiece(),randPiece(),randPiece()];
+    const w=workingOrders(b,t,{n:Math.min(20000,budget.n)});budget.n-=20000;
+    if(w.ok<1||w.ok>=w.total||w.total<3)continue;
+    if(!best||w.ok<best.ok)best={t,ok:w.ok};
+    if(best.ok<=maxOrders)break;
+  }
+  // if nothing strict enough turned up, the strictest set found still beats a free one
+  return best&&best.t;
+}
 function deal(){
   // Lucky streaks: now and then the next few deals are very generous, to keep it fun
   if(!S.lucky&&Math.random()<LUCKY_CHANCE)S.lucky=LUCKY_LENGTH;
@@ -602,6 +636,12 @@ function deal(){
   const help=Math.max(0,Math.min(1,(filled-0.15)/0.3));
   const ease=Math.max(0.5,1-(S.dealt||0)/400);
   S.dealt=(S.dealt||0)+1;
+  // Crowded board: deal a puzzle. The three pieces still always fit, but only when
+  // played in the right order (one or two orders out of the possible ones).
+  if(!lucky){
+    const tight=Math.max(0,Math.min(1,(filled-TIGHT_FROM)/TIGHT_SPAN));
+    if(tight>0&&Math.random()<tight){const t=puzzleTrio(S.board,filled>=ONE_ORDER_FROM?1:2);if(t){S.tray=t;return}}
+  }
   const cands=[];
   for(let i=0;i<20;i++){
     const t=[randPiece(),randPiece(),randPiece()],o=trioOutlook(S.board,t);
